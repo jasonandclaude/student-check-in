@@ -1,37 +1,53 @@
 // app/(tabs)/index.tsx
-import { View, StyleSheet } from 'react-native';
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
+import { StyleSheet } from 'react-native';
 import { useState, useEffect } from 'react';
-import { Text } from '@/components/Themed';
+import { Text, View } from '@/components/Themed';
+import { checkInStudent } from '../src/lib/api';
 
 export default function CheckInScreen() {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [scanning, setScanning] = useState(true);
+  const [hasPermission, setHasPermission] = useState(false);
+  const device = useCameraDevice('back');
+
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr'],
+    onCodeScanned: (codes) => {
+      if (codes.length > 0) {
+        handleCode(codes[0].value);
+      }
+    }
+  });
 
   useEffect(() => {
-    (async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
+    Camera.requestCameraPermission().then(status => {
       setHasPermission(status === 'granted');
-    })();
+    });
   }, []);
 
-  const handleBarCodeScanned = ({ data }) => {
-    setScanning(false);
-    console.log('Scanned:', data);
-    // Add Supabase integration here
+  const handleCode = async (data: string) => {
+    try {
+      const result = await checkInStudent(data);
+      console.log('Check-in successful:', result);
+    } catch (error) {
+      console.error('Check-in failed:', error);
+    }
   };
 
+  if (!device || !hasPermission) {
+    return (
+      <View style={styles.container}>
+        <Text>No camera available</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      {scanning && hasPermission ? (
-        <BarCodeScanner
-          onBarCodeScanned={handleBarCodeScanned}
-          style={StyleSheet.absoluteFillObject}
-        />
-      ) : (
-        <Text style={styles.title}>Scan Student QR Code</Text>
-      )}
-    </View>
+    <Camera
+      style={StyleSheet.absoluteFill}
+      device={device}
+      isActive={true}
+      codeScanner={codeScanner}
+    />
   );
 }
 
@@ -40,9 +56,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
+  }
 });
